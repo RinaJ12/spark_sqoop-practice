@@ -1,0 +1,310 @@
+Problem Scenario 74 : You have been given MySQL DB with following details. 
+
+User=retail_dba 
+password=cloudera 
+database=retail_db 
+table=retail_db.orders 
+Table=retail_db.order_items 
+jdbc URL = jdbc:mysql://quickstart:3306/retail_db 
+Columns of order table : (order_id , order_date , order_customer_id, order_status) 
+
+Columns of order_items table : (order_item_id , order_item_order_ 
+id , order_item_product_id, order_item_quantity,order_item_subtotal,order_
+item_product_price) 
+Please accomplish following activities. 
+
+1. Copy "retail_db.orders" and "retail_db.order_items" table to hdfs in respective directory p89_orders and p89_order_items 
+
+sqoop import \
+--connect jdbc:mysql://quickstart:3306/retail_db \
+--username root \
+--password cloudera \
+--table orders \
+--m 1 \
+--target-dir 96_sce/prob_74/orders
+
+sqoop import \
+--connect jdbc:mysql://quickstart:3306/retail_db \
+--username root \
+--password cloudera \
+--table order_items \
+--m 1 \
+--target-dir 96_sce/prob_74/order_items
+
+case class Orders(order_id:Int , order_date:String , order_customer_id:Int, order_status:String)
+case class Order_Items(order_item_id:Int, order_item_order_id:Int , order_item_product_id:Int, order_item_quantity:Int,order_item_subtotal:Double,order_item_product_price:Double)
+
+val o = sc.textFile("96_sce/prob_74/orders").map(rec=>{
+val temp = rec.split(",")
+Orders(temp(0).toInt,temp(1),temp(2).toInt,temp(3))
+}).toDF
+val oi = sc.textFile("96_sce/prob_74/order_items").map(rec=>{
+val temp = rec.split(",")
+Order_Items(temp(0).toInt,temp(1).toInt,temp(2).toInt,temp(3).toInt,temp(4).toDouble,temp(5).toDouble)
+}).toDF
+
+val o_oi = o.join(oi,o("order_id")===oi("order_item_order_id"))
+
+=>filter condition on dataframe
+
+o_oi.filter(col("order_id") === 2828).select("order_id","order_date","order_item_subtotal")
+o_oi.filter("order_id = 2828")
+
+=> Calculate total order placed for each date, and produced the output sorted by date. 
+ 
+ val o_oi_total = o_oi.groupBy("order_date").agg(sum("order_item_subtotal").alias("total_amount")).orderBy("order_date","total_amount")
+==============================================================================================
+
+Problem Scenario 75 : You have been given MySQL DB with following details. 
+user=retail_dba 
+password=cloudera 
+database=retail_db 
+table=retail_db.order_items 
+jdbc URL = jdbc:mysql://quickstart:3306/retail_db 
+Please accomplish following activities. 
+1. Copy "retail_db.order_items" table to hdfs in respective directory P90_order_items. 
+2. Do the summation of entire revenue in this table using pyspark. 
+val tot_rev = oi.agg(sum("order_item_subtotal").alias("total_revenue"))
+
+3. Find the maximum and minimum revenue as well. 
+val max_min_rev = oi.agg(max("order_item_subtotal").alias("max_revenue"),min("order_item_subtotal").alias("min_revenue"))
+
+4. Calculate average revenue 
+val avg_rev = oi.agg(avg("order_item_subtotal"))
+
+Columns of order_items table : (order_item_id , order_item_order_id , order_item_product_id, order_item_quantity,order_item_subtotal,order_item_product_price) 
+==============================================================================
+Problem Scenario 82 : You have been given table in Hive with following structure (Which you have created in previous exercise). 
+productid int 
+code string 
+name string 
+quantity int 
+price float 
+using SparkSQL accomplish following activities. 
+1. Select all the products name and quantity having quantity <=2000 
+2. Select name and price ot the product having code as 'PEN' 
+3. Select all the products, which name starts with PENCIL 
+4. Select all products which "name" begins with 'P', followed by any two characters, followed by space, followed by zero or more characters 
+===================================================================================
+Problem Scenario 87 : You have been given below three Files 
+
+Warning: when creating the raw file or openning the raw file, make sure no ending trailing space for each line
+product.csv (Create this File in hdfs) 
+
+productlD,productCode,name,quantity,price,supplierid 
+1001,PEN,pen Red,5000,1.23,501
+1002,PEN,pen blue,8000,1.25,501
+1003,PEN,pen Black,2000,1.25,501
+1004,PEC,pencil 2B,10000,0.48,502
+1005,PEC,pencil 2H,8000,0.49,502
+1006,PEC,pencil 2B,10000,0.48,502
+2001,PEC,pencil 3B,5000,0.52,501
+2002,PEC,pencil 4B,200,0.62,501
+2003,PEC,pencil 5B,100,0.73,501
+2004,PEC,pencil 6B,500,0.47,502
+
+Supplier.csv
+Supplierid,name,phone
+501,ABC Traders,88881111
+502,XYZ company,8882222
+
+503,QQ corp,88883333
+
+products_suppliers.csv
+
+productlD,supplierID
+2001,501
+2002, 501
+2003, 501
+2004, 502
+2001,503
+
+Now accomplish all the queries given in solution. 
+
+Select product, its price , its supplier name where product price is less than 0.6 using SparkSQL 
+
+case class Products(product_id:Int,product_code:String,product_name:String,product_qty:Int,product_price:Double,supp_id:Int)
+val prod = sc.textFile("96_sce/prob_87/prob_87.csv").mapPartitionsWithIndex((index,rec)=> if(index==0) rec.drop(1) else rec).map(rec=>{
+val temp=rec.split(",")
+Products(temp(0).toInt,temp(1),temp(2),temp(3).toInt,temp(4).toDouble,temp(5).toInt)
+}).toDF
+case class Suppliers(supp_id:Int,supp_name:String,supp_phone:Long)
+val sup = sc.textFile("96_sce/prob_87/supplier.csv").filter(rec=>rec.length>0).mapPartitionsWithIndex((index,rec)=> if(index==0) rec.drop(1) else rec).map(rec=>{
+val temp=rec.split(",")
+Suppliers(temp(0).toInt,temp(1),temp(2).toLong)
+}).toDF
+
+//val prod_map = prod.map(rec=>(rec.supp_id,rec))
+//val sup_map = sup.map(rec=>(rec.supp_id,rec))
+
+val prod_sup = prod.join(sup,prod("supp_id")===sup("supp_id"))
+prod_sup.filter("product_price<0.6").select("product_name","product_price","supp_name").show
+
+----------------
+sparksql
+
+
+prod.registerTempTable("prod_tbl")
+sup.registerTempTable("sup_tbl")
+
+sqlContext.sql("select p.product_name,p.product_price,s.supp_name from prod_tbl p inner join sup_tbl s on p.supp_id = s.supp_id").show
+
+========================================================================================================
+
+Problem Scenario 88 : You have been given below three Files now accomplish all the queries given in solution. 
+
+1. It is possible that, same product can be supplied by multiple supplier. Now find each product, its price according to each supplier. 
+sqlContext.sql("select p.product_id,p.product_name,p.product_price ,s.supp_name from prod_tbl p join sup_tbl s on p.supp_id = s.supp_id").show
+
+prod_sup.select("product_id","product_name","product_price","supp_name").show
+
+2. Find all the supllier name, who are supplying 'Pencil 3B' 
+sqlContext.sql("select s.supp_name from sup_tbl s join prod_tbl p on s.supp_id = p.supp_id where p.product_name='pencil 3B'").show
+
+prod_sup.filter(col("product_name") === "pencil 3B").select("supp_name").show
+prod_sup.filter("product_name = 'ABC Traders'").show
+
+3. Find all the products, which are supplied by ABC Traders.
+sqlContext.sql("select p.product_name from prod_tbl p join sup_tbl s on p.supp_id = s.supp_id where s.supp_name='ABC Traders'").show
+prod_sup.filter(col("supp_name")==="ABC Traders").show
+prod_sup.filter("supp_name = 'ABC Traders'").show
+
+============================================================================================================
+Problem Scenario 89 : You have been given below patient data in csv format. 
+
+patients.csv 
+
+patientlD,name,dateOtBirth,lastVisitDate 
+
+1001,Ah Teck,1991-12-31,2012-01-20
+1002,Kumar,2011-10-29,2012-09-20
+1003,Ali,2011-01-30,2012-10-21
+
+//remove header
+val pat_info = sc.textFile("96_sce/prob_89/prob_89.csv").mapPartitionsWithIndex((indx,rec)=>if(indx==0) rec.drop(1) else rec).map(rec=>{
+val temp = rec.split(",")
+Patients(temp(0).toInt,temp(1),temp(2),temp(3))
+}).toDF; 
+
+Accomplish following activities.
+1. Find all the patients whose lastVisitDate between current time and '2012-09-15'
+2. Find all the patients who born in 2011
+3. Find all the patients age
+4. List patients whose last visited more than 60 days ago
+5. Select patients 18 years old or younger
+
+case class Patients(p_id:Int,p_name:String,p_dob:String,p_lvd:String)
+
+val pat_info = sc.textFile("96_sce/prob_89/prob_89.csv").map(rec=>{
+val temp = rec.split(",")
+Patients(temp(0).toInt,temp(1),temp(2),temp(3))
+}).toDF; 
+
+pat_info.registerTempTable("pat_tbl")
+
+1. Find all the patients whose lastVisitDate between current time and '2012-09-15'
+
+sqlContext.sql("select * from pat_tbl where p_lvd between '1990-09-12' AND current_date() ").show
+
+2. Find all the patients who born in 2011
+sqlContext.sql("select * from pat_tbl where year(p_dob) = '2011'").show
+
+3. Find all the patients age
+sqlContext.sql("select p_name,year(current_date())-year(p_dob) from pat_tbl")
+
+4. List patients whose last visited more than 60 days ago
+sqlContext.sql("select * from pat_tbl where datediff(current_date(),p_lvd) > 60").show
+
+5. Select patients 18 years old or younger
+sqlContext.sql("select *, year(current_date())-year(p_lvd) as age from pat_tbl where year(current_date())-year(p_dob) <= 18 ").show
+
+==================================================================================================
+Problem Scenario 90 : You have been given below two files 
+
+course.txt 
+
+id,course 
+1,Hadoop
+2,Spark
+3,HBase
+5,Impala
+
+Fee.txt 
+id,fee 
+2,3900
+3,4200
+4,2900
+
+
+Accomplish the following activities.
+
+case class Courses(c_id:Int,c_name:String)
+case class Fee(f_id:Int,f_fee:Int)
+
+val crs = sc.textFile("96_sce/prob_90/course.txt").mapPartitionsWithIndex((idx,rec)=> if(idx==0) rec.drop(1) else rec).map(rec=>{
+val temp=rec.split(",")
+Courses(temp(0).toInt,temp(1))
+}).toDF
+val fee = sc.textFile("96_sce/prob_90/Fee.txt").mapPartitionsWithIndex((idx,rec)=> if(idx==0) rec.drop(1) else rec).map(rec=>{
+val temp=rec.split(",")
+Fee(temp(0).toInt,temp(1).toInt)
+}).toDF
+
+crs.registerTempTable("c_tbl")
+fee.registerTempTable("f_tbl")
+
+1. Select all the courses and their fees , whether fee is listed or not. 
+crs.join(fee,crs("c_id")===fee("f_id"),"leftouter").show //sql
+sqlContext.sql("select c.c_id,c.c_name,isnull(f.f_fee,0),CASE WHEN f.f_id is null or f.f_id = '' then 0 else f_id END as fee_id from c_tbl c left outer join f_tbl f on c.c_id=f.f_id").show()
+
+2. Select all the available fees and respective course. If course does not exists still list the fee 
+fee.join(crs,crs("c_id")===fee("f_id"),"rightouter").show()
+or
+fee.join(crs,crs("c_id")===fee("f_id"),"leftouter").show()
+
+3. Select all the courses and their fees , whether fee is listed or not. However, ignore records having fee as null.
+
+crs.join(fee,crs("c_id")===fee("f_id")).filter("f_fee is not null").show
+=======================================================================================================
+Problem Scenario 91: You have been given data in json format as below
+{"first_name":"Ankit","last_name":"jain"}
+{"first_name":"Amir","last_name":"Khan"}
+{"first_name":"Rajesh", "last_name":"Khanna"}
+{"first_name":"Priynka", "last_name":"Chopra"}
+{"first_name":"Kareena", "last_name":"Kapoor"}
+{"first_name":"Lokesh","last_name":"Yadav"}
+
+Do the following activity 
+
+
+
+1. create employee.json file locally. 
+2. Load this tile on hdfs 
+3. Register this data as a temp table in Spark using Python. 
+
+val src = sqlContext.read.json("96_sce/prob_73/prob_73.json")
+src.registerTempTable("src_tbl")
+src.show//to display all data
+
+4. Write select query and print this data. 
+sqlContext.sql("select * from src_tbl").show()
+
+5. Now save back this selected data in json format. 
+val data_to_save = sqlContext.sql("select * from src_tbl")
+data_to_save.write.format("json").save("96_sce/prob_90/op_json1")
+
+data_to_save.write.json("96_sce/prob_90/op_json2")
+
+data_to_save.write.format("com.databricks.spark.avro").save("96_sce/prob_90/op_avro")
+
+data_to_save.write.orc("96_sce/prob_90/op_orc")
+
+data_to_save.write.parquet("96_sce/prob_90/op_parquet")
+
+data_to_save.repartition(1).write.parquet("96_sce/prob_90/op_parquet_p1")
+
+sqlContext.setConf("spark.sql.avro.compression.codec","deflate")
+data_to_save.write.parquet("96_sce/prob_90/op_parquet_snappy")
+
+
+

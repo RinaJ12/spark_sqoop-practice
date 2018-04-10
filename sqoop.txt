@@ -1,0 +1,250 @@
+3. Problem Scenario 3: You have been given MySQL DB with following details. 
+user=retail_dba 
+password=cloudera 
+database=retail_db 
+table=retail_db.categories 
+jdbc URL = jdbc:mysql://quickstart:3306/retail_db 
+
+
+1. Import data from catagories table, where category=22 (Data should be stored in prob_3) 
+
+sqoop import \
+--connect jdbc:mysql://quickstart:3306/retail_db \
+--username root \
+--password cloudera \
+--table categories \
+--where "category_id > 22" \
+--target-dir 96_sce/sqoop/prob_3_catm3 \
+--m 1
+
+2. Import data from catagories table, where category between 1 and 22
+
+sqoop import \
+--connect jdbc:mysql://quickstart:3306/retail_db \
+--username root \
+--password cloudera \
+--table categories \
+--where  "category_id BETWEEN 1 AND 22" \
+--target-dir 96_sce/sqoop/prob_3_c1_22 \
+--m 1
+
+Attention: between is a close set, "between 1 and 22" includes 1 and 22, to exclude 1 and 22, either use "between 2 and 21" or use "category_id > 1 and category_id <22"
+
+3.While importing catagories data change the delimiter to 'I' (Data should be stored in categories_subset_6) 
+
+sqoop import \
+--connect jdbc:mysql://quickstart:3306/retail_db \
+--username root \
+--password cloudera \
+--table categories \
+--fields-terminated-by 'I' \
+--target-dir 96_sce/sqoop/prob_3_ftI
+
+
+4.Importing data from catagories table and restrict the import to category_name,category_id columns only with delimiter as '|' 
+
+sqoop import \
+--connect jdbc:mysql://quickstart:3306/retail_db \
+--username root \
+--password cloudera \
+--table categories \
+--columns category_name,category_id \
+--fields-terminated-by '|' \
+--target-dir 96_sce/sqoop/prob3_col \
+--m 1
+
+5.Importing data from catagories table (In categories_subset_17 directory) using '|' delimiter and category_id between 1 and 61 and encode null values for both string and non string columns.
+
+sqoop import \
+--connect jdbc:mysql://quickstart:3306/retail_db \
+--username root \
+--password cloudera \
+--table tbl1 \
+--fields-terminated-by '|' \
+--null-string "its_null_string" \
+--null-non-string "its_num_null" \
+--target-dir 96_sce/sqoop/prob3_null \
+--m 1
+
+5. Import all tables
+
+sqoop import-all-tables \
+--connect jdbc:mysql://quickstart.cloudera:3306 \
+--username root \
+--password cloudera \
+--warehouse-dir /path/to/hdfs 
+
+if(all the tables in db do not have primary key then either explicitly specify in split-by column or set --num-mapper or --m to 1)
+
+===============================================================================================================================
+
+4. Problem Scenario 4: You have been given MySQL DB with following details. 
+user=retail_dba 
+password=cloudera 
+database=retail_db 
+table=retail_db.categories 
+jdbc URL = jdbc:mysql://quickstart:3306/retail_db 
+Please accomplish following activities. 
+Import Single table categories(Subset data) to hive managed table , where category_id between 1 and 22 
+
+
+hive_db : sqoop_db
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--table categories \
+--where "category_id >1 AND category_id<22" \
+--hive-database sqoop_db \
+--hive-table categories \
+--hive-import \
+--m 1
+
+======================================================================================
+Problem Scenario 5 : You have been given following mysql database details. 
+user=retail_dba 
+password=cloudera 
+database=retail_db 
+jdbc URL = jdbc:mysql://quickstart:3306/retail_db 
+
+Please accomplish following activities. 
+1. List all the tables using sqoop command from retail_db 
+
+sqoop list-tables \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera 
+
+2. Write simple sqoop eval command to check whether you have permission to read database tables or not. 
+
+sqoop eval \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--query "select count(1) from products"
+
+3. Import all the tables as avro files in /user/hive/warehouse/paslechoix
+
+sqoop import-all-tables \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--warehouse-dir /user/hive/warehouse/sqoop_db.db \
+--m 1 \
+--as-avrodatafile
+
+===============================================================================================
+Problem Scenario 6 : You have been given following mysql database details as well as other info. 
+user=retail_dba 
+password=cloudera 
+database=retail_db 
+jdbc URL = jdbc:mysql://quickstart:3306/retail_db 
+
+
+Compression Codec : org.apache.hadoop.io.compress.SnappyCodec 
+Please accomplish following. 
+1. Import entire database such that it can be used as a hive tables, it must be created in default schema. 
+2. Also make sure each tables file is partitioned in 3 files e.g. part-00001, part-00002, part-00003 
+3. Store all the java files in a directory called java_output to evaluate the further 
+
+sqoop import-all-tables \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--hive-import \
+--create-hive-table \
+--m 3 \
+--compress \
+--compression-codec org.apache.hadoop.io.compress.SnappyCodec \
+--outdir /home/cloudera/sqoop_codegen
+
+//make sure there are not any tables without PK otherwise import wont be successful
+=====================================================================================================
+
+Problem Scenario 7 : You have been given following mysql database details as well as other info. 
+User=retail_dba 
+password=cloudera 
+database=retail db 
+jdbc URL = jdbc:mysql://quickstart:3306/retail_db 
+Please accomplish following. 
+1. Import department tables using your custome boundary query, which import departments between 1 to 25. 
+2. Also make sure each tables tile is partitioned in 2 tiles e.g. part-00001, part-00002 
+3. Also make sure you have imported only two columns from table, which are department_id,department_name 
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--query "select department_id,department_name from departments where department_id between 2 and 24 AND \$CONDITIONS" \
+--split-by department_id \
+--m 2 \
+--target-dir 96_sce/sqoop/prob_7
+
+or 
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--columns department_id,department_name \
+--where "department_id between 2 and 24"
+--m 2 \
+--target-dir 96_sce/sqoop/prob_7
+
+=======================================================================================================
+Problem Scenario 9 : You have been given following mysql database details as well as other into. 
+user=retail_dba 
+password=cloudera 
+database=retail_db 
+jdbc URL = jdbc:mysql://quickstart:3306/retail_db 
+Please accomplish following.
+
+1. Import departments table in a directory. 
+2. Again import departments table same directory (However, directory already exist hence it should not overwrite and append the results) 
+3. Also make sure your results fields are terminated by '|' and lines terminated by '\n'. 
+
+//create new directory department
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--table departments \
+--target-dir departments \
+--fields-terminated-by '|' \
+--lines-terminated-by '\n' \
+--m 1 
+
+//append data to directory department
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--table departments \
+--append \
+--target-dir departments \
+--fields-terminated-by '|' \
+--lines-terminated-by '\n' \
+--m 1 
+
+//Incremental import
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--table departments \
+--target-dir departments \
+--fields-terminated-by '|' \
+--lines-terminated-by '\n' \
+--m 1 \
+--check-column department_id \
+--incremental append \
+--last-value 7
+
+
+
+
+
+

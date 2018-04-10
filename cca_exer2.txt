@@ -1,0 +1,106 @@
+1.import table orders, only one output file,as avro file,snappy compression, /user/cloudera/file_formats/sce2/problem1
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--table orders \
+--m 1 \
+--as-avrodatafile \
+--compress \
+--compression-codec org.apache.hadoop.io.compress.SnappyCodec \
+--target-dir /user/cloudera/file_formats/sce2/problem1
+
+2. import table order_items 2 output files,parquet file format,gzip compression, /user/cloudera/file_formats/sce2/problem2,
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--table order_items \
+--m 2 \
+--as-parquetfile \
+--compress \
+--compression-codec org.apache.hadoop.io.compress.GzipCodec \
+--target-dir /user/cloudera/file_formats/sce2/problem2 
+
+3. 	load data into dataframe.
+	filter orders which are not SUSPECTED_FRAUD or CANCELED
+	sort data per order_status,order_id
+	save filtered data in json format /user/cloudera/file_formats/sce2/problem3
+
+	import com.databricks.spark.avro._
+val order = sqlContext.read.avro("/user/cloudera/file_formats/sce2/problem1").
+filter("order_status!='SUSPECTED_FRAUD' AND order_status!='CANCELED'").
+orderBy("order_status","order_id")
+
+order.toJSON.saveAsTextFile("/user/cloudera/file_formats/sce2/problem3")
+
+4.load data into dataframe.
+	filter order_items which price is greater than 50 and less than or equal to 75
+	save filtered data in parquet format /user/cloudera/file_formats/sce2/problem4
+
+val oi = sqlContext.read.parquet("/user/cloudera/file_formats/sce2/problem2").filter("order_item_product_price > 50.0 AND order_item_product_price <= 75.0")
+
+oi.write.parquet("/user/cloudera/file_formats/sce2/problem4")
+
+
+5.join order and order_items and find total_purchase,total number of customers per staus,per day
+
+val o_oi_df= order.join(oi,order("order_id")===oi("order_item_order_id")).groupBy(to_date(from_unixtime(col("order_date")/1000)).alias("order_date"),col("order_status")).agg(countDistinct("order_customer_id").alias("total_customers"),round(sum("order_item_subtotal"),2).alias("total_purchase")).orderBy(col("order_date").desc,col("order_status"))
+
+o_oi: org.apache.spark.sql.DataFrame = [order_id: int, order_date: bigint, order_customer_id: int, order_status: string, order_item_id: int, order_item_order_id: int, order_item_product_id: int, order_item_quantity: int, order_item_subtotal: float, order_item_product_price: float]
+
+val o_oi_rdd = order.join(oi,order("order_id")===oi("order_item_order_id")).select("order_date","order_status","order_customer_id","order_item_subtotal").map(rec=>((rec(0).toString,rec(1).toString),(rec(2).toString.toInt,rec(3).toString.toFloat))).combineByKey(
+((rec)=>(scala.collection.immutable.HashSet(rec._1),rec._2)),
+((acc:(scala.collection.immutable.HashSet[Int],Float),rec:(Int,Float))=>(acc._1+rec._1,acc._2+rec._2)),
+((acc:(scala.collection.immutable.HashSet[Int],Float),rec:(scala.collection.immutable.HashSet[Int],Float))=>(acc._1++rec._1,acc._2+rec._2))
+).map(rec=>(rec._1._1,rec._1._2,rec._2._1.size,rec._2._2)).toDF().orderBy(col("_1").desc,col("_2"))
+
+save output in /user/cloudera/file_formats/sce2/problem5
+
+o_oi.map(rec=>rec(0)+","+rec(1)+","+rec(2)+","+rec(3)).toDF().write.text("/user/cloudera/file_formats/sce2/problem5")
+
+==========================================================================
+
+
+
+==========================================================================
+
+
+6. save /user/cloudera/file_formats/sce2/problem3 at /user/cloudera/file_formats/sce2/problem6 as sequence file,order_id as key and record as value
+
+	order.map(rec=>(rec(0).toString.toInt,rec(0)+"\t"+rec(1)+"\t"+rec(2)+"\t"+rec(3))).saveAsSequenceFile("/user/cloudera/file_formats/sce2/problem6")
+
+7. save /user/cloudera/file_formats/sce2/problem4 at  /user/cloudera/file_formats/sce2/problem7 as avro file,snappy compression,only one output file
+
+	sqlContext.setConf("spark.sql.avro.compression.codec","snappy")
+	oi.repartition(1).write.avro("/user/cloudera/file_formats/sce2/problem7")
+
+8. save /user/cloudera/file_formats/sce2/problem5 at /user/cloudera/file_formats/sce2/problem8 as parquet file,not compressed,2 output files.
+	
+	sqlContext.setConf("spark.sql.parquet.compression.codec","uncompressed")
+	o_oi.repartition(2).write.parquet("/user/cloudera/file_formats/sce2/problem8")
+
+9. export /user/cloudera/file_formats/sce2/problem1  into orders_replica ,database ccaprep
+
+sqoop export \
+--connect jdbc:mysql://quickstart.cloudera:3306/ccaprep \
+--username root \
+--password cloudera \
+--table orders_replica \
+--export-dir /user/cloudera/file_formats/sce2/problem1 \
+--input-null-string 'null' \
+--input-null-non-string 'null'
+
+sqoop export \
+--connect jdbc:mysql://quickstart.cloudera:3306/ccaprep \
+--username root \
+--password cloudera \
+--table customer_replica \
+--export-dir /user/cloudera/file_formats/sce1/text_start_delim_cust \
+--input-null-string 'NULL_EXPORT' \
+--input-null-non-string '-100' \
+--input-fields-terminated-by '*'
+
+

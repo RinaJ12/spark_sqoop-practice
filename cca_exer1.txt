@@ -1,0 +1,253 @@
+1. import customer_replica table at /user/cloudera/file_formats/sce1/text_start_delim_cust  customer_id greater than or equal to 100 using 3 mappers 
+															null string => 'No_Comment_star' null number => -1
+															* delimeter 
+
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/ccaprep \
+--username root \
+--password cloudera \
+--table customer_replica \
+--target-dir /user/cloudera/file_formats/sce1/text_start_delim_cust \
+--where "customer_id >= 100" \
+--m 3 \
+--split-by customer_id \
+--null-string 'No_Comment_star' \
+--null-non-string -1 \
+--fields-terminated-by '*'
+
+2.import orders table at /user/cloudera/file_formats/sce1/text_pipe_delim_orders
+													   null string => 'No_Comment_pipe' null number => -2
+													   | delimited
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--table orders \
+--target-dir /user/cloudera/file_formats/sce1/text_pipe_delim_orders \
+--null-string 'No_Comment_pipe' \
+--null-non-string -2 \
+--fields-terminated-by '|'
+
+3. import order_items table at /user/cloudera/file_formats/sce1/text_tab_delim_order_items 
+													   null string => 'No_Comment_tab' null number => -3
+													   \t delimited
+
+sqoop import \
+--connect jdbc:mysql://quickstart.cloudera:3306/retail_db \
+--username root \
+--password cloudera \
+--table order_items \
+--target-dir /user/cloudera/file_formats/sce1/text_tab_delim_order_items \
+--null-string 'No_Comment_tab' \
+--null-non-string -3 \
+--fields-terminated-by '\t'
+
+
+4.
+
++-------------------+-------------+------+-----+---------+----------------+
+| Field             | Type        | Null | Key | Default | Extra          |
++-------------------+-------------+------+-----+---------+----------------+
+| order_id          | int(11)     | NO   | PRI | NULL    | auto_increment |
+| order_date        | datetime    | NO   |     | NULL    |                |
+| order_customer_id | int(11)     | NO   |     | NULL    |                |
+| order_status      | varchar(45) | NO   |     | NULL    |                |
++-------------------+-------------+------+-----+---------+----------------+
+4 rows in set (0.00 sec)
+
+mysql> describe retail_db.order_items;
++--------------------------+------------+------+-----+---------+----------------+
+| Field                    | Type       | Null | Key | Default | Extra          |
++--------------------------+------------+------+-----+---------+----------------+
+| order_item_id            | int(11)    | NO   | PRI | NULL    | auto_increment |
+| order_item_order_id      | int(11)    | NO   |     | NULL    |                |
+| order_item_product_id    | int(11)    | NO   |     | NULL    |                |
+| order_item_quantity      | tinyint(4) | NO   |     | NULL    |                |
+| order_item_subtotal      | float      | NO   |     | NULL    |                |
+| order_item_product_price | float      | NO   |     | NULL    |                |
++--------------------------+------------+------+-----+---------+----------------+
+6 rows in set (0.00 sec)
+
+mysql> describe customer_replica;
+ERROR 1146 (42S02): Table 'retail_db.customer_replica' doesn't exist
+mysql> describe ccaprep.customer_replica;
++-------------------+--------------+------+-----+---------+-------+
+| Field             | Type         | Null | Key | Default | Extra |
++-------------------+--------------+------+-----+---------+-------+
+| customer_id       | int(11)      | NO   |     | 0       |       |
+| customer_fname    | varchar(45)  | NO   |     | NULL    |       |
+| customer_lname    | varchar(45)  | NO   |     | NULL    |       |
+| customer_email    | varchar(45)  | NO   |     | NULL    |       |
+| customer_password | varchar(45)  | NO   |     | NULL    |       |
+| customer_street   | varchar(255) | NO   |     | NULL    |       |
+| customer_city     | varchar(45)  | NO   |     | NULL    |       |
+| customer_state    | varchar(45)  | NO   |     | NULL    |       |
+| customer_zipcode  | varchar(45)  | NO   |     | NULL    |       |
+| customer_comment  | varchar(500) | YES  |     | NULL    |       |
+| customer_rank     | int(11)      | YES  |     | NULL    |       |
++-------------------+--------------+------+-----+---------+-------+
+
+
+load customer,orders and order_items in RDD // create case class
+
+case class customers(cust_id:Int,cust_fname:String,cust_lname:String,cust_email:String,cust_pwd:String,cust_street:String,cust_city:String,cust_state:String,cust_zipcode:String,cust_comment:String,cust_rank:Int)
+case class orders(order_id:Int,order_date:String,order_customer_id:Int,order_status:String)
+case class order_items(oi_id:Int,oi_order_id:Int,oi_product_id:Int,oi_quantity:Int,oi_subtotal:Float,oi_product_price:Float)
+
+
+5. total orders per customer ,
+output : customer_id,customer_fname,customer_lname,total_orders
+format : '*' delimited
+
+
+save output to /user/cloudera/file_formats/sce1/problem5 as textFile with snappy compression
+
+
+val cust_data = sc.textFile("/user/cloudera/file_formats/sce1/text_start_delim_cust").map(rec=>{
+val temp = rec.split('*')
+customers(temp(0).toInt,temp(1),temp(2),temp(3),temp(4),temp(5),temp(6),temp(7),temp(8),temp(9),temp(10).toInt)
+}).toDF
+
+val order_data = sc.textFile("/user/cloudera/file_formats/sce1/text_pipe_delim_orders").map(rec=>{
+val temp = rec.split('|')
+orders(temp(0).toInt,temp(1),temp(2).toInt,temp(3))
+}).toDF()
+
+val cust_ord = cust_data.join(order_data,cust_data("cust_id")===order_data("order_customer_id")).groupBy("cust_id","cust_fname","cust_lname").agg(countDistinct("order_id").alias("total_orders")).map(rec=>rec(0).toString.toInt+"*"+rec(1).toString+"*"+rec(2).toString+"*"+rec(3).toString.toInt).sortBy(rec=>rec.split('*')(0))
+
+cust_ord.saveAsTextFile("/user/cloudera/file_formats/sce1/problem5",classOf[org.apache.hadoop.io.compress.SnappyCodec])
+
+6. total orders per state 
+output : state_name,total_orders
+format : '\t' delimited
+
+
+save output to /user/cloudera/file_formats/sce1/problem6 using gzip compression
+
+val state_ord = cust_data.join(order_data,cust_data("cust_id")===order_data("order_customer_id")).groupBy("cust_state").agg(countDistinct("order_id").alias("total_ordes")).map(rec=>rec(0)+"\t"+rec(1))
+
+state_ord.saveAsTextFile("/user/cloudera/file_formats/sce1/problem6",classOf[org.apache.hadoop.io.compress.GzipCodec])
+
+7. total_unique_products,total_amount per order_id 
+output : order_id,total_unique_products,total_amount
+format : '|' delimited
+
+save output to /user/cloudera/file_formats/sce1/problem7 using bzip2 compression
+
+val oi_data = sc.textFile("/user/cloudera/file_formats/sce1/text_tab_delim_order_items").map(rec=>{
+val temp = rec.split('\t')
+order_items(temp(0).toInt,temp(1).toInt,temp(2).toInt,temp(3).toInt,temp(4).toFloat,temp(5).toFloat)
+}).toDF()
+
+val o_oi = order_data.join(oi_data,order_data("order_id")===oi_data("oi_order_id")).groupBy("order_id").agg(countDistinct("oi_product_id").alias("total_unique_products"),sum("oi_subtotal").alias("total_amount")).map(rec=>rec(0)+"|"+rec(1)+"|"+rec(2))
+
+o_oi.saveAsTextFile("/user/cloudera/file_formats/sce1/problem7",classOf[org.apache.hadoop.io.compress.BZip2Codec])
+
+
+8. /user/cloudera/file_formats/sce1/problem7 save as parquet file ,uncompressed compression /user/cloudera/file_formats/sce1/problem8
+
+sqlContext.setConf("spark.sql.parquet.compression.codec","uncompressed")
+val prob8 = sc.textFile("/user/cloudera/file_formats/sce1/problem7").toDF()
+prob8.write.parquet("/user/cloudera/file_formats/sce1/problem8")
+
+9. /user/cloudera/file_formats/sce1/problem6 save as avro file ,snappy compression /user/cloudera/file_formats/sce1/problem9
+sqlContext.setConf("spark.sql.avro.compression.codec","snappy")
+val prob9 = sc.textFile("/user/cloudera/file_formats/sce1/problem6").toDF()
+prob9.write.avro("/user/cloudera/file_formats/sce1/problem9")
+
+//sqlContext.setConf("spark.sql.avro.compression.codec","snappy")
+//prob9.repartition(1).write.format("com.databricks.spark.avro").save("/user/cloudera/file_formats/sce1/problem9_snappy")
+//sqlContext.setConf("spark.sql.avro.compression.codec","uncompressed")
+//prob9.repartition(1).write.format("com.databricks.spark.avro").save("/user/cloudera/file_formats/sce1/problem9_uncompressed")
+
+=============================
+
+val cust_data = sc.textFile("/user/cloudera/file_formats/sce1/text_start_delim_cust").map(rec=>{
+val temp = rec.split('*')
+customers(temp(0).toInt,temp(1),temp(2),temp(3),temp(4),temp(5),temp(6),temp(7),temp(8),temp(9),temp(10).toInt)
+}).toDF
+
+val order_data = sc.textFile("/user/cloudera/file_formats/sce1/text_pipe_delim_orders").map(rec=>{
+val temp = rec.split('|')
+orders(temp(0).toInt,temp(1),temp(2).toInt,temp(3))
+}).toDF()
+
+val cust_ord_df = cust_data.join(order_data,cust_data("cust_id")===order_data("order_customer_id")).groupBy("cust_id","cust_fname","cust_lname").agg(countDistinct("order_id").alias("total_orders")).map(rec=>rec(0).toString.toInt+"*"+rec(1).toString+"*"+rec(2).toString+"*"+rec(3).toString.toInt).sortBy(rec=>rec.split('*')(0).toInt)
+
+cust_ord.saveAsTextFile("/user/cloudera/file_formats/sce1/problem5",classOf[org.apache.hadoop.io.compress.SnappyCodec])
+
+
+---------------------------------------------
+
+val cust_map = sc.textFile("/user/cloudera/file_formats/sce1/text_start_delim_cust").map(rec=>{
+val temp = rec.split('*')
+customers(temp(0).toInt,temp(1),temp(2),temp(3),temp(4),temp(5),temp(6),temp(7),temp(8),temp(9),temp(10).toInt)
+}).map(rec=>(rec.cust_id,(rec.cust_id,rec.cust_fname,rec.cust_lname)))
+
+
+val order_map = sc.textFile("/user/cloudera/file_formats/sce1/text_pipe_delim_orders").map(rec=>{
+val temp = rec.split('|')
+orders(temp(0).toInt,temp(1),temp(2).toInt,temp(3))
+}).map(rec=>(rec.order_customer_id,rec.order_id))
+
+val ord_cust_rdd = cust_map.join(order_map).map(rec=>(rec._2._1,rec._2._2)).combineByKey((rec=>scala.collection.immutable.HashSet(rec)),((acc:scala.collection.immutable.HashSet[Int],rec:Int)=>(acc+rec)),((acc1:scala.collection.immutable.HashSet[Int],acc2:scala.collection.immutable.HashSet[Int])=>(acc1++acc2))).map(rec=>(rec._1,rec._2.size)).repartition(1).sortBy(rec=>rec._1._1)
+--------
+
+6. total orders per state 
+output : state_name,total_orders
+format : '\t' delimited
+
+val cust_map = sc.textFile("/user/cloudera/file_formats/sce1/text_start_delim_cust").map(rec=>{
+val temp = rec.split('*')
+customers(temp(0).toInt,temp(1),temp(2),temp(3),temp(4),temp(5),temp(6),temp(7),temp(8),temp(9),temp(10).toInt)
+}).map(rec=>(rec.cust_id,(rec.cust_id,rec.cust_state)))
+
+
+val order_map = sc.textFile("/user/cloudera/file_formats/sce1/text_pipe_delim_orders").map(rec=>{
+val temp = rec.split('|')
+orders(temp(0).toInt,temp(1),temp(2).toInt,temp(3))
+}).map(rec=>(rec.order_customer_id,rec.order_id))
+
+org.apache.spark.rdd.RDD[(Int, ((Int, String), Int))]
+
+val o_cust_rdd = cust_map.join(order_map).map(rec=>(rec._2._1._2,1)).reduceByKey(_+_).sortByKey()
+================================================================
+
+case class customers(cust_id:Int,cust_fname:String,cust_lname:String,cust_email:String,cust_pwd:String,cust_street:String,cust_city:String,cust_state:String,cust_zipcode:String,cust_comment:String,cust_rank:Int)
+case class orders(order_id:Int,order_date:String,order_customer_id:Int,order_status:String)
+case class order_items(oi_id:Int,oi_order_id:Int,oi_product_id:Int,oi_quantity:Int,oi_subtotal:Float,oi_product_price:Float)
+
+total_unique_products,total_amount per order_id 
+output : order_id,total_unique_products,total_amount
+format : '|' delimited
+
+order_id oi_product_id,oi_subtotal
+
+val oi_map = sc.textFile("/user/cloudera/file_formats/sce1/text_tab_delim_order_items").map(rec=>{
+val temp = rec.split('\t')
+order_items(temp(0).toInt,temp(1).toInt,temp(2).toInt,temp(3).toInt,temp(4).toFloat,temp(5).toFloat)
+}).map(rec=>(rec.oi_order_id,(rec.oi_product_id,rec.oi_subtotal)))
+
+val order_map = sc.textFile("/user/cloudera/file_formats/sce1/text_pipe_delim_orders").map(rec=>{
+val temp = rec.split('|')
+orders(temp(0).toInt,temp(1),temp(2).toInt,temp(3))
+}).map(rec=>(rec.order_id,rec.order_id))
+
+
+val o_oi = order_map.join(oi_map)
+
+org.apache.spark.rdd.RDD[(Int, (Int, (Int, Float)))]
+
+val o_oi_rdd = order_map.join(oi_map).map(rec=>(rec._2._1,rec._2._2)).combineByKey(
+(rec=>(scala.collection.immutable.HashSet(rec._1),rec._2)),
+((acc:(scala.collection.immutable.HashSet[Int],Float),rec:(Int,Float))=>(acc._1+rec._1,acc._2+rec._2)),
+((acc1:(scala.collection.immutable.HashSet[Int],Float),acc2:(scala.collection.immutable.HashSet[Int],Float))=>(acc1._1++acc2._1,acc1._2+acc2._2))).
+map(rec=>(rec._1,rec._2._1.size,rec._2._2)).sortBy(rec=>rec._1)
+
+
+val o_oi_df = order_data.join(oi_data,order_data("order_id")===oi_data("oi_order_id")).groupBy("order_id").agg(countDistinct("oi_product_id").alias("total_unique_products"),sum("oi_subtotal").alias("total_amount")).map(rec=>rec(0)+"|"+rec(1)+"|"+rec(2)).sortBy(rec=>rec.split('|')(0).toInt)
+
+
+

@@ -1,0 +1,187 @@
+
+-------------------------------------------------------------------
+sqoop
+-------------------------------------------------------------------
+
+import  
+=>text_start_delim
+=>text_pipe_delim
+=>text_tab_delim
+
+=>text+snappy department
+		
+		output file : /user/cloudera/file_formats/sqoop/text_snappy/part-m-00000.snappy
+
+=>text_gzip
+
+		output file : /user/cloudera/file_formats/sqoop/text_gzip/part-m-00000.gz
+
+=>avro_snappy orders // snappy extension not visible
+
+		command : sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username root --password cloudera --table orders --target-dir  	 /user/cloudera/file_formats/sqoop/avro_snappy_orders --m 1 --as-avrodatafile --compress --compression-codec org.apache.hadoop.io.compress.SnappyCodec
+
+		output file : 644.7 K 2018-03-27 16:14 /user/cloudera/file_formats/sqoop/avro_snappy_orders/part-m-00000.avro
+
+=>avro_gzip //gzip compression not supported
+
+		command : sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username root -password cloudera --table orders --as-avrodatafile --compress --compression-codec org.apache.hadoop.io.compress.GzipCodec --target-dir /user/cloudera/file_formats/sqoop/avro_gzip_orders
+
+		Exception :Error: org.apache.avro.AvroRuntimeException: Unrecognized codec: gzip
+ 
+
+=>avro_deflate
+
+		command : sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username root -password cloudera --table order_items --target-dir /user/cloudera/file_formats/sqoop/avro_defalte_order_items --as-avrodatafile --z --compression-codec org.apache.hadoop.io.compress.DeflateCodec --m 1
+
+		output file : 782.5 K 2018-03-27 16:27 /user/cloudera/file_formats/sqoop/avro_defalte_order_items/part-m-00000.avro
+
+		Objavro.codecdeflateavro.schema�
+
+
+=>parquet_snappy //snappy extension not visible
+
+		command: sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username root -password cloudera --table order_items --target-dir /user/cloudera/file_formats/sqoop/parquet_snappy_order_items --as-parquetfile --compress --compression-codec org.apache.hadoop.io.compress.SnappyCodec --m 1
+		
+		output file : 1.6 M 2018-03-27 16:44 /user/cloudera/file_formats/sqoop/parquet_snappy_order_items/e61c8923-73c4-48ff-af9f-994fedb7388d.parquet
+
+		command: sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username root -password cloudera --table products --target-dir /user/cloudera/file_formats/sqoop/parquet_snappy_products --as-parquetfile --compress --compression-codec org.apache.hadoop.io.compress.SnappyCodec --m 1
+
+		output file : 43.8 K 2018-03-27 17:16 /user/cloudera/file_formats/sqoop/parquet_snappy_products/55efa601-4f05-4b89-83a4-c2851374d1ae.parquet
+
+=>parquet_gzip
+		
+		command : sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username root --password cloudera --table customers --target-dir /user/cloudera/file_formats/sqoop/parquet_gzip_customers --as-parquetfile --compress --compression-codec org.apache.hadoop.io.compress.GzipCodec --m 1
+		
+		output file : 248.7 K 2018-03-27 16:47 /user/cloudera/file_formats/sqoop/parquet_gzip_customers/54efa848-1a8e-4326-bc74-f57795761f96.parquet
+
+
+=> parquet_uncompressed
+
+		command : sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username root --password cloudera --table products --target-dir /user/cloudera/file_formats/sqoop/parquet_uncompressed --as-parquetfile --m 1
+
+		output : 43.8 K 2018-03-27 16:51 /user/cloudera/file_formats/sqoop/parquet_uncompressed/eba3c894-0823-4229-b59d-eda1f2ed548e.parquet
+
+		sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username root --password cloudera --table order_items --target-dir /user/cloudera/file_formats/sqoop/parquet_uncompressed_order_items --as-parquetfile --m 1
+
+		output : 1.6 M 2018-03-27 16:54 /user/cloudera/file_formats/sqoop/parquet_uncompressed_order_items/4908db4f-1c3b-425b-b473-5fb51bb76428.parquet
+
+		sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username root --password cloudera --table products --target-dir /user/cloudera/file_formats/sqoop/parquet_uncompressed_products --as-parquetfile --m 1
+
+		output : 43.8 K 2018-03-27 17:18 /user/cloudera/file_formats/sqoop/parquet_uncompressed_products/4e5d2b0c-45e0-400c-bb89-12defff9540b.parquet
+
+
+=>orc // not supported
+
+=>json //not supported
+--------------------------------------------------		
+spark
+--------------------------------------------------
+read 	text
+		avro
+		parquet
+		json
+		sequence
+		orc
+
+write
+
+scala> val input = sqlContext.read.parquet("problem5/parquet-snappy-compress")
+
+=> text_uncompressed
+
+		scala> input.rdd.saveAsTextFile("/user/cloudera/file_formats/spark/text_uncompressed")
+
+		output file : /user/cloudera/file_formats/spark/text_uncompressed/part-00000
+
+=>text+gz //gz extension visible
+
+		scala> input.map(rec=>rec).saveAsTextFile("/user/cloudera/file_formats/spark/text_gzip",classOf[org.apache.hadoop.io.compress.GzipCodec])
+
+		output file : /user/cloudera/file_formats/spark/text_gzip/part-00000.gz
+
+=>text+snappy //snappy extension visible
+
+		scala> input.rdd.saveAsTextFile("/user/cloudera/file_formats/spark/text_snappy",classOf[org.apache.hadoop.io.compress.SnappyCodec])
+
+		output file : /user/cloudera/file_formats/spark/text_snappy/part-00000.snappy
+
+=>avro+snappy // extension snappy not visible
+		
+		scala> sqlContext.setConf("spark.sql.avro.compression.codec","snappy")
+
+		scala> input.write.avro("/user/cloudera/file_formats/spark/avro_snappy")
+
+		output file : 143.6 K 2018-03-27 14:43 /user/cloudera/file_formats/spark/avro_snappy/part-r-00000-9eb11396-9935-4480-bca5-8f027f14b9be.avro
+
+=>avro+gzip //not supported
+		
+		scala> import com.databricks.spark.avro._
+		import com.databricks.spark.avro._
+
+		scala> sqlContext.setConf("spark.sql.avro.compression.codec","gzip")
+
+		scala> input.write.avro("/user/cloudera/file_formats/spark/avro_gzip")
+		18/03/27 14:32:14 ERROR avro.AvroRelation: compression gzip is not supported
+
+		output file :  /user/cloudera/file_formats/spark/avro_gzip/part-r-00000-55859cf0-cbbf-4830-8bb3-1913b18d58f1.avro
+=>avro+deflate //not supported
+=>avro+uncompressed
+		scala> sqlContext.setConf("spark.sql.avro.compression.codec","uncompressed")
+
+		scala> import com.databricks.spark.avro._
+		import com.databricks.spark.avro._
+
+		scala> input.write.avro("/user/cloudera/file_formats/spark/avro_uncompressed")
+
+		output file :  /user/cloudera/file_formats/spark/avro_uncompressed/part-r-00000-9bc753ea-60e5-41e5-acf8-9e0437bf93ea.avro
+
+=>paruqet+snppy //extension snappy visible
+		scala> sqlContext.setConf("spark.sql.parquet.compression.codec","snappy")
+
+		scala> input.write.parquet("/user/cloudera/file_formats/spark/parquet_snappy")
+
+		output file : /user/cloudera/file_formats/spark/parquet_snappy/part-r-00000-c6f404a6-644e-4055-adfe-f6ac72990c45.snappy.parquet
+
+=>parquet+gzip //extension gzip visible
+
+		scala> sqlContext.setConf("spark.sql.parquet.compression.codec","gzip")
+
+		scala>input.write.parquet("/user/cloudera/file_formats/spark/parquet_gzip")
+
+		output file : /user/cloudera/file_formats/spark/parquet_snappy/part-r-00000-54656c68-9d72-4f50-b7e1-6fb53f6fff45.gz.parquet
+
+=>parquet+uncompressed
+
+		sqlContext.setConf("spark.sql.parquet.compression.codec","uncompressed")
+
+		input.write.parquet("/user/cloudera/file_formats/spark/parquet_uncompressed")
+
+=>orc+no_compress
+
+		scala> input.write.orc("/user/cloudera/file_formats/spark/orc_nocompress")
+
+		output file : /user/cloudera/file_formats/spark/orc_nocompress/part-r-00000-420d7f4f-b912-4769-84cd-c18c4c8ddffc.orc
+
+=> orc+compression(snappy/gzip) not supported
+		
+=>json+uncompressed // json extension not visible
+
+		scala> input.toJSON.saveAsTextFile("/user/cloudera/file_formats/spark/json_uncompressed")
+
+		output file : problem5/json-no-compress_tojson/part-00000
+
+=> json+gzip //gz extension visible
+
+		scala> input.toJSON.saveAsTextFile("/user/cloudera/file_formats/spark/json_gzip",classOf[org.apache.hadoop.io.compress.GzipCodec])
+
+		output file : /user/cloudera/file_formats/spark/json_gzip/part-00000.gz
+
+=> json+snappy //snappy extension visible
+
+		scala> input.toJSON.saveAsTextFile("/user/cloudera/file_formats/spark/json_snappy",classOf[org.apache.hadoop.io.compress.SnappyCodec])
+
+		output file : /user/cloudera/file_formats/spark/json_snappy/part-00000.snappy
+                                                                                
+
+
+
